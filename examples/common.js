@@ -22328,8 +22328,8 @@
 /* 182 */
 /***/ function(module, exports) {
 
-	/* eslint-disable no-unused-vars */
 	'use strict';
+	/* eslint-disable no-unused-vars */
 	var hasOwnProperty = Object.prototype.hasOwnProperty;
 	var propIsEnumerable = Object.prototype.propertyIsEnumerable;
 	
@@ -22341,7 +22341,51 @@
 		return Object(val);
 	}
 	
-	module.exports = Object.assign || function (target, source) {
+	function shouldUseNative() {
+		try {
+			if (!Object.assign) {
+				return false;
+			}
+	
+			// Detect buggy property enumeration order in older V8 versions.
+	
+			// https://bugs.chromium.org/p/v8/issues/detail?id=4118
+			var test1 = new String('abc');  // eslint-disable-line
+			test1[5] = 'de';
+			if (Object.getOwnPropertyNames(test1)[0] === '5') {
+				return false;
+			}
+	
+			// https://bugs.chromium.org/p/v8/issues/detail?id=3056
+			var test2 = {};
+			for (var i = 0; i < 10; i++) {
+				test2['_' + String.fromCharCode(i)] = i;
+			}
+			var order2 = Object.getOwnPropertyNames(test2).map(function (n) {
+				return test2[n];
+			});
+			if (order2.join('') !== '0123456789') {
+				return false;
+			}
+	
+			// https://bugs.chromium.org/p/v8/issues/detail?id=3056
+			var test3 = {};
+			'abcdefghijklmnopqrst'.split('').forEach(function (letter) {
+				test3[letter] = letter;
+			});
+			if (Object.keys(Object.assign({}, test3)).join('') !==
+					'abcdefghijklmnopqrst') {
+				return false;
+			}
+	
+			return true;
+		} catch (e) {
+			// We don't expect any of the above to throw, but better to be safe.
+			return false;
+		}
+	}
+	
+	module.exports = shouldUseNative() ? Object.assign : function (target, source) {
 		var from;
 		var to = toObject(target);
 		var symbols;
@@ -22436,6 +22480,10 @@
 	
 	var _react2 = _interopRequireDefault(_react);
 	
+	var _classnames = __webpack_require__(168);
+	
+	var _classnames2 = _interopRequireDefault(_classnames);
+	
 	var Track = function Track(_ref) {
 	  var className = _ref.className;
 	  var included = _ref.included;
@@ -22453,7 +22501,14 @@
 	    style.left = offset + '%';
 	    style.width = length + '%';
 	  }
-	  return _react2['default'].createElement('div', { className: className, style: style });
+	  return _react2['default'].createElement(
+	    'div',
+	    { className: className, style: style },
+	    _react2['default'].createElement('span', { className: 'track-block track-block-1' }),
+	    _react2['default'].createElement('span', { className: 'track-block track-block-2' }),
+	    _react2['default'].createElement('span', { className: 'track-block track-block-3' }),
+	    _react2['default'].createElement('span', { className: 'track-block track-block-4' })
+	  );
 	};
 	
 	exports['default'] = Track;
@@ -22961,7 +23016,7 @@
 	            props.afterPopupVisibleChange(state.popupVisible);
 	          }
 	        });
-	        if (props.action.indexOf('click') !== -1) {
+	        if (_this.isClickToHide()) {
 	          if (state.popupVisible) {
 	            if (!_this.clickOutsideHandler) {
 	              _this.clickOutsideHandler = _rcUtil.Dom.addEventListener(document, 'mousedown', _this.onDocumentClick);
@@ -23005,8 +23060,12 @@
 	    this.delaySetPopupVisible(false, this.props.mouseLeaveDelay);
 	  },
 	  onFocus: function onFocus() {
-	    this.focusTime = Date.now();
-	    this.delaySetPopupVisible(true, this.props.focusDelay);
+	    // incase focusin and focusout
+	    this.clearDelayTimer();
+	    if (this.isFocusToShow()) {
+	      this.focusTime = Date.now();
+	      this.delaySetPopupVisible(true, this.props.focusDelay);
+	    }
 	  },
 	  onMouseDown: function onMouseDown() {
 	    this.preClickTime = Date.now();
@@ -23015,7 +23074,10 @@
 	    this.preTouchTime = Date.now();
 	  },
 	  onBlur: function onBlur() {
-	    this.delaySetPopupVisible(false, this.props.blurDelay);
+	    this.clearDelayTimer();
+	    if (this.isBlurToHide()) {
+	      this.delaySetPopupVisible(false, this.props.blurDelay);
+	    }
 	  },
 	  onClick: function onClick(event) {
 	    // focus will trigger click
@@ -23214,10 +23276,8 @@
 	    if (this.isMouseLeaveToHide()) {
 	      newChildProps.onMouseLeave = (0, _rcUtil.createChainedFunction)(this.onMouseLeave, childProps.onMouseLeave);
 	    }
-	    if (this.isFocusToShow()) {
+	    if (this.isFocusToShow() || this.isBlurToHide()) {
 	      newChildProps.onFocus = (0, _rcUtil.createChainedFunction)(this.onFocus, childProps.onFocus);
-	    }
-	    if (this.isBlurToHide()) {
 	      newChildProps.onBlur = (0, _rcUtil.createChainedFunction)(this.onBlur, childProps.onBlur);
 	    }
 	
@@ -25375,20 +25435,20 @@
 	
 	  _Event2["default"].addEndEventListener(node, node.rcEndListener);
 	
-	  nodeClasses.add(className);
-	
 	  if (start) {
 	    start();
 	  }
+	  nodeClasses.add(className);
 	
 	  node.rcAnimTimeout = setTimeout(function () {
 	    node.rcAnimTimeout = null;
 	    nodeClasses.add(activeClassName);
 	    if (active) {
-	      active();
+	      setTimeout(active, 0);
 	    }
 	    fixBrowserByTimeout(node);
-	  }, 0);
+	    // 30ms for firefox
+	  }, 30);
 	
 	  return {
 	    stop: function stop() {
